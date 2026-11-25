@@ -36,15 +36,36 @@ jobs:
               implementation("com.google.code.gson:gson:2.11.0"); implementation("androidx.documentfile:documentfile:1.0.1")
           }
           EOF
-          cat << 'EOF' > app/src/main/AndroidManifest.xml
+                    cat << 'EOF' > app/src/main/AndroidManifest.xml
           <?xml version="1.0" encoding="utf-8"?>
-          <manifest xmlns:android="http://android.com" xmlns:tools="http://android.com">
-              <uses-permission android:name="android.permission.INTERNET" /><uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-              <uses-permission android:name="android.permission.FOREGROUND_SERVICE" /><uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+          <manifest xmlns:android="http://android.com"
+              xmlns:tools="http://android.com">
+
+              <uses-permission android:name="android.permission.INTERNET" />
+              <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+              <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+              <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
               <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-              <application android:allowBackup="true" android:label="Xbox 360 Manager" android:usesCleartextTraffic="true" android:theme="@android:style/Theme.Material.NoActionBar">
-                  <activity android:name=".MainActivity" android:exported="true"><intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter></activity>
-                  <service android:name="androidx.work.impl.foreground.SystemForegroundService" android:foregroundServiceType="dataSync" tools:node="merge" />
+
+              <application
+                  android:allowBackup="true"
+                  android:label="Xbox 360 Manager"
+                  android:usesCleartextTraffic="true"
+                  android:theme="@android:style/Theme.Material.NoActionBar">
+
+                  <activity
+                      android:name=".MainActivity"
+                      android:exported="true">
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN" />
+                          <category android:name="android.intent.category.LAUNCHER" />
+                      </intent-filter>
+                  </activity>
+
+                  <service
+                      android:name="androidx.work.impl.foreground.SystemForegroundService"
+                      android:foregroundServiceType="dataSync"
+                      tools:node="merge" />
               </application>
           </manifest>
           EOF
@@ -189,107 +210,4 @@ jobs:
           }
           EOF
                     cat << 'EOF' > app/src/main/java/com/example/xboxmanager/MainActivity.kt
-          package com.example.xboxmanager
-          import android.Manifest; import android.animation.*; import android.app.*; import android.content.*
-          import android.content.pm.PackageManager; import android.graphics.Color; import android.graphics.drawable.GradientDrawable
-          import android.net.Uri; import android.os.*; import android.text.InputType; import android.view.*; import android.webkit.*
-          import android.widget.*; import androidx.activity.ComponentActivity; import androidx.activity.result.contract.ActivityResultContracts
-          import androidx.core.content.ContextCompat; import androidx.documentfile.provider.DocumentFile
-          import androidx.lifecycle.lifecycleScope; import androidx.work.*; import kotlinx.coroutines.*; import java.io.File
-          class MainActivity : ComponentActivity() {
-              companion object { const val DEFAULT_HOME_URL = "" }
-              private lateinit var cm: ConsoleManager; private val rc = XboxRemoteController(); private lateinit var wv: WebView; private lateinit var badge: TextView
-              private var rPath = "/Hdd1/Homebrew"
-              private val fPick = registerForActivityResult(ActivityResultContracts.GetContent()) { u -> if (u != null) cpUri(u) }
-              private val dPick = registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { u -> if (u != null) cpTree(u) }
-              private val pReq = registerForActivityResult(ActivityResultContracts.RequestPermission()) {}
-              override fun onCreate(savedInstanceState: Bundle?) {
-                  super.onCreate(savedInstanceState)
-                  if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) pReq.launch(Manifest.permission.POST_NOTIFICATIONS)
-                  cm = ConsoleManager(this)
-                  val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; layoutParams = ViewGroup.LayoutParams(-1, -1) }
-                  val grad = GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(Color.parseColor("#0D1F12"), Color.parseColor("#107C10")))
-                  root.background = grad
-                  ValueAnimator.ofObject(ArgbEvaluator(), Color.parseColor("#107C10"), Color.parseColor("#0A290D"), Color.parseColor("#1DB954")).apply { duration = 4000; repeatCount = -1; repeatMode = ValueAnimator.REVERSE; addUpdateListener { grad.colors = intArrayOf(Color.parseColor("#0A0A0A"), it.animatedValue as Int) }; start() }
-                  val top = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(16, 16, 16, 8); setBackgroundColor(Color.parseColor("#CC121212")) }
-                  val urlIn = EditText(this).apply { hint = "Enter URL..."; setTextColor(Color.WHITE); setHintTextColor(Color.GRAY); setBackgroundColor(Color.parseColor("#262626")); setPadding(24, 18, 24, 18); inputType = InputType.TYPE_TEXT_VARIATION_URI; isSingleLine = true; layoutParams = LinearLayout.LayoutParams(0, -2, 1f) }
-                  val go = Button(this).apply { text = "GO"; setTextColor(Color.WHITE); setBackgroundColor(Color.parseColor("#107C10")); layoutParams = LinearLayout.LayoutParams(-2, -2).apply { marginStart = 12 } }
-                  val dots = Button(this).apply { text = "⋮"; textSize = 18f; setTextColor(Color.WHITE); setBackgroundColor(Color.parseColor("#262626")); layoutParams = LinearLayout.LayoutParams(120, -2).apply { marginStart = 8 } }
-                  top.addView(urlIn); top.addView(go); top.addView(dots)
-                  val act = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(16, 8, 16, 16); setBackgroundColor(Color.parseColor("#CC121212")) }
-                  badge = TextView(this).apply { text = "HOMEBREW"; setTextColor(Color.parseColor("#4CAF50")); textSize = 12f; setPadding(0, 0, 16, 0) }
-                  val fBtn = btn("📂 File", "#262626"); val rBtn = btn("🎮 Remote", "#262626"); val aBtn = btn("+ Xbox", "#107C10")
-                  act.addView(badge); act.addView(fBtn); act.addView(rBtn); act.addView(aBtn)
-                  wv = WebView(this).apply { setBackgroundColor(Color.parseColor("#121212")); layoutParams = LinearLayout.LayoutParams(-1, 0, 1f) }
-                  root.addView(top); root.addView(act); root.addView(wv); setContentView(root)
-                  wv.settings.javaScriptEnabled = true; wv.settings.domStorageEnabled = true; wv.webViewClient = WebViewClient()
-                  wv.setDownloadListener { url, ua, cd, mime, _ ->
-                      val name = URLUtil.guessFileName(url, cd, mime)
-                      val dest = File(getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), name)
-                      val req = DownloadManager.Request(Uri.parse(url)).setMimeType(mime).addRequestHeader("User-Agent", ua).setTitle(name).setNotificationVisibility(1).setDestinationUri(Uri.fromFile(dest))
-                      val id = (getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager).enqueue(req)
-                      Toast.makeText(this, "Downloading: $name", Toast.LENGTH_SHORT).show()
-                      val rx = object : BroadcastReceiver() {
-                          override fun onReceive(c: Context?, i: Intent?) {
-                              if (i?.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1) == id) {
-                                  unregisterReceiver(this)
-                                  askXbox(dest.absolutePath, false)
-                              }
-                          }
-                      }
-                      ContextCompat.registerReceiver(this, rx, IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE), ContextCompat.RECEIVER_NOT_EXPORTED)
-                  }
-                  if (DEFAULT_HOME_URL.isNotEmpty()) { urlIn.setText(DEFAULT_HOME_URL); wv.loadUrl(DEFAULT_HOME_URL) }
-                  go.setOnClickListener { var u = urlIn.text.toString().trim(); if (u.isNotEmpty()) { if (!u.startsWith("http")) u = "https://$u"; wv.loadUrl(u) } }
-                  dots.setOnClickListener { v ->
-                      PopupMenu(this, v).apply {
-                          menu.add(0, 1, 0, "1. Homebrew (/Hdd1/Homebrew)")
-                          menu.add(0, 2, 1, "2. Games (/Hdd1/Content/0000000000000000)")
-                          setOnMenuItemClickListener {
-                              if (it.itemId == 1) { rPath = "/Hdd1/Homebrew"; badge.text = "HOMEBREW" }
-                              else { rPath = "/Hdd1/Content/0000000000000000"; badge.text = "GAMES (GOD)" }
-                              true
-                          }
-                          show()
-                      }
-                  }
-                  fBtn.setOnClickListener {
-                      AlertDialog.Builder(this).setTitle("Send File").setItems(arrayOf("Select File", "Select Folder")) { _, w ->
-                          if (w == 0) fPick.launch("*/*") else dPick.launch(null)
-                      }.show()
-                  }
-                  rBtn.setOnClickListener {
-                      val l = cm.getConsoles()
-                      if (l.isEmpty()) { Toast.makeText(this, "Add Xbox first!", Toast.LENGTH_SHORT).show(); return@setOnClickListener }
-                      AlertDialog.Builder(this).setTitle("Console").setItems(l.map { "${it.name} (${it.ip})" }.toTypedArray()) { _, w ->
-                          val c = l[w]
-                          val codes = arrayOf("dashboard", "reboot", "shutdown", "opendvd")
-                          AlertDialog.Builder(this).setTitle(c.name).setItems(arrayOf("🏠 Reload Dashboard", "🔄 Cold Reboot", "⏻ Shutdown", "💿 Eject DVD")) { _, i ->
-                              lifecycleScope.launch { Toast.makeText(this@MainActivity, rc.sendXbdmCommand(c, codes[i]).getOrElse { it.message }, Toast.LENGTH_LONG).show() }
-                          }.show()
-                      }.show()
-                  }
-                  aBtn.setOnClickListener { addDlg(null) }
-              }
-              private fun btn(t: String, c: String) = Button(this).apply { text = t; textSize = 12f; setTextColor(Color.WHITE); setBackgroundColor(Color.parseColor(c)); layoutParams = LinearLayout.LayoutParams(0, 105, 1f).apply { marginStart = 6; marginEnd = 6 } }
-              private fun cpUri(u: Uri) = lifecycleScope.launch(Dispatchers.IO) { val f = File(cacheDir, DocumentFile.fromSingleUri(this@MainActivity, u)?.name ?: "file.zip"); contentResolver.openInputStream(u)?.use { i -> f.outputStream().use { o -> i.copyTo(o) } }; withContext(Dispatchers.Main) { askXbox(f.absolutePath, true) } }
-              private fun cpTree(u: Uri) = lifecycleScope.launch(Dispatchers.IO) { val r = DocumentFile.fromTreeUri(this@MainActivity, u) ?: return@launch; val d = File(cacheDir, r.name ?: "Game").apply { deleteRecursively(); mkdirs() }; cpRec(r, d); withContext(Dispatchers.Main) { askXbox(d.absolutePath, true) } }
-              private fun cpRec(doc: DocumentFile, t: File) = doc.listFiles().forEach { if (it.isDirectory) cpRec(it, File(t, it.name ?: "s").apply { mkdirs() }) else if (it.isFile) contentResolver.openInputStream(it.uri)?.use { i -> File(t, it.name ?: "f").outputStream().use { o -> i.copyTo(o) } } }
-              private fun askXbox(p: String, del: Boolean) { val l = cm.getConsoles(); if (l.isEmpty()) { addDlg { send(p, it, del) }; return }; AlertDialog.Builder(this).setTitle("Send to [$rPath]").setItems(l.map { "${it.name} (${it.ip})" }.toTypedArray()) { _, w -> send(p, l[w], del) }.setPositiveButton("+ New") { _, _ -> addDlg { send(p, it, del) } }.show() }
-              private fun addDlg(cb: ((XboxConsole) -> Unit)?) {
-                  val lay = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(48, 24, 48, 12) }
-                                private fun send(p: String, c: XboxConsole, del: Boolean) {
-                  val d = workDataOf("FILE_PATH" to p, "XBOX_IP" to c.ip, "XBOX_PORT" to c.ftpPort, "FTP_USER" to c.user, "FTP_PASS" to c.pass, "REMOTE_DIR" to rPath, "DELETE_SOURCE" to del)
-                  WorkManager.getInstance(this).enqueue(OneTimeWorkRequestBuilder<FtpUploadWorker>().setInputData(d).setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.UNMETERED).build()).build())
-                  Toast.makeText(this, "Uploading in background...", Toast.LENGTH_LONG).show()
-              }
-              @Deprecated("Deprecated in Java") override fun onBackPressed() { if (wv.canGoBack()) wv.goBack() else super.onBackPressed() }
-          }
-          EOF
-          gradle wrapper --gradle-version 8.5
-          ./gradlew assembleDebug
-      - uses: actions/upload-artifact@v4
-        with:
-          name: Xbox
-          path: app/build/outputs/apk/debug/app-debug.apk
-          
+          package com.example.xb
